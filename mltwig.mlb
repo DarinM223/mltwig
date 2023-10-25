@@ -1,0 +1,6 @@
+$(SML_LIB)/basis/basis.mlb
+analyzer.lex.sml
+lexer.sml
+parser.sml
+automata.sml
+main.sml

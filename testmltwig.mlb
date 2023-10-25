@@ -1,0 +1,6 @@
+$(SML_LIB)/basis/basis.mlb
+ann "milletDiagnosticsIgnore all" in
+    runtime.sml
+    example.mtw.sml
+end
+testmltwig2.sml
