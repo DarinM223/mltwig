@@ -40,7 +40,7 @@ sig
     TextIO.instream
     -> (code_fragment list * rule list * cost * string * string * symbol list)
 
-end;
+end
 
 (*
    The parser is a straightforward predictive parser. It interfaces to the
@@ -77,7 +77,7 @@ sig
 
   val next_rule: stable -> int * stable
 
-end;
+end
 
 structure Symboltable: SYMBOLTABLE =
 struct
@@ -129,14 +129,14 @@ struct
 
   (* Declare_label and declare_node just extend the function. *)
 
-  fun declare_label (st as (symbols, rn, ls, ns), s, ty) =
+  fun declare_label ((symbols, rn, ls, ns), s, ty) =
     ( (fn s' => if s' = s then NonTerminal else symbols s')
     , rn
     , (s, ty) :: ls
     , ns
     )
 
-  fun declare_node (st as (symbols, rn, ls, ns), s, a) =
+  fun declare_node ((symbols, rn, ls, ns), s, a) =
     ((fn s' => if s' = s then Terminal a else symbols s'), rn, ls, (s, a) :: ns)
 
   fun next_rule (symbols, rn, ls, ns) =
@@ -144,7 +144,7 @@ struct
 
   fun get_labels (_, _, ls, _) = ls
   fun get_nodes' (_, _, _, ns) = ns
-end;
+end
 
 
 functor MAKEparser (structure Symboltable: SYMBOLTABLE and Lexer: LEXER): PARSER =
@@ -436,7 +436,7 @@ struct
 
   and specification instream =
     let
-      val dummy = (lexf := make_lexer instream)
+      val () = lexf := make_lexer instream
       val ((a, b, c, d), st) =
         parsespecification
           (([], [], NoCost, "TreeProcessor"), empty_symboltable)
@@ -450,12 +450,12 @@ struct
         , d
         , construct_resulttype st
         , (map (fn (s, _) => Label s) (get_labels st))
-          @ (map (fn n => Node n) (get_nodes' st))
+          @ (map Node (get_nodes' st))
         )
     end
     handle
       SymbolConflict s => error ("Symbol Table : " ^ s)
-    | LexError => error ("Lexical Error")
+    | LexError => error "Lexical Error"
 
   and lexerS () =
     (!lexf) ()

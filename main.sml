@@ -220,7 +220,7 @@ struct
     let
       fun member (a, nil) = false
         | member (a, h :: t) =
-            if a = h then true else member (a, t)
+            a = h orelse member (a, t)
       val initials =
         accum (fn ((_, _, i), a) => if member (i, a) then a else i :: a)
           unitrules nil

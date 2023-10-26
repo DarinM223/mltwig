@@ -2,4 +2,6 @@ version = 1
 [workspace]
 root = "mltwig.mlb"
 [diagnostics]
+5029.severity = "ignore"
+5033.severity = "ignore"
 5043.severity = "ignore"
