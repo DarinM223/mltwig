@@ -167,76 +167,87 @@ struct
 
   val int2str: int -> string = Int.toString
 
-  val accum = revfold
+  val accum: ('a * 'b -> 'b) -> 'a list -> 'b -> 'b = revfold
 
   (* This function traverses a tree pattern and concurrently adds arcs
      to the trie representation of a tree pattern matching automaton. *)
 
-  fun add_pattern (autom, rule1, nont, Leaf n, state, len) =
-        let val (autom', state') = add_arc (autom, state, Sym n)
-        in add_finals (autom', state', [(len, rule1, nont)])
-        end
-    | add_pattern (autom, rule1, nont, Tree (n, cs), state, len) =
-        let
-          val (autom', state') = add_arc (autom, state, Sym n)
-          val (autom'''', _) =
-            accum
-              (fn (c, (autom'', cn)) =>
-                 let
-                   val (autom''', state'') = add_arc (autom'', state', Child cn)
-                 in
-                   ( add_pattern (autom''', rule1, nont, c, state'', len + 1)
-                   , cn + 1
-                   )
-                 end) cs (autom', 1)
-        in
-          autom''''
-        end
+  val rec
+    add_pattern:
+      automaton * int * Parser.symbol * Parser.tree_pattern * int * int
+      -> automaton =
+    fn (autom, rule1, nont, Leaf n, state, len) =>
+      let val (autom', state') = add_arc (autom, state, Sym n)
+      in add_finals (autom', state', [(len, rule1, nont)])
+      end
+     | (autom, rule1, nont, Tree (n, cs), state, len) =>
+      let
+        val (autom': automaton, state': int) = add_arc (autom, state, Sym n)
+        val (autom'''': automaton, _) =
+          accum
+            (fn (c: Parser.tree_pattern, (autom'': automaton, cn: int)) =>
+               let
+                 val (autom''': automaton, state'': int) =
+                   add_arc (autom'', state', Child cn)
+               in
+                 ( add_pattern (autom''', rule1, nont, c, state'', len + 1)
+                 , cn + 1
+                 )
+               end) cs (autom', 1)
+      in
+        autom''''
+      end
 
-  fun go (au, s, i) =
+  fun go (au: automaton, s: int, i: alpha) : int =
     let
-      val ts = get_transitions (au, s)
-      val rec g = fn nil => ~1 | ((p, q) :: t) => if p = i then q else g t
+      val transitions: (alpha * int) list = get_transitions (au, s)
+      val rec go' =
+        fn nil => ~1 | ((p: alpha, q: int) :: t) => if p = i then q else go' t
     in
-      g ts
+      go' transitions
     end
 
-  fun oflevel1 au =
-    let val ts = get_transitions (au, 0)
-    in map (fn (p, q) => q) ts
+  fun oflevel1 (au: automaton) : int list =
+    let val transitions: (alpha * int) list = get_transitions (au, 0)
+    in map (fn (p, q) => q) transitions
     end
 
-  fun iterate (au, nil, nil) = au
-    | iterate (au, nil, next) = iterate (au, next, nil)
-    | iterate (au, h :: t, next) =
-        let
-          val f = get_failure (au, h)
-          val ts = get_transitions (au, h)
-          val au' =
-            accum
-              (fn ((i, s), aut) =>
-                 let
-                   val rec fail = fn state =>
-                     if go (aut, state, i) <> ~1 then go (aut, state, i)
-                     else if state = 0 then 0
-                     else fail (get_failure (aut, state))
-                 in
-                   add_finals
-                     (set_failure (aut, s, fail f), s, get_finals (aut, fail f))
-                 end) ts au
-        in
-          iterate (au', t, (map (fn (p, q) => q) ts) @ next)
-        end
+  val rec iterate: automaton * int list * int list -> automaton =
+    fn (au, nil, nil) => au
+     | (au, nil, next) => iterate (au, next, nil)
+     | (au, h :: t, next) =>
+      let
+        val failure: int = get_failure (au, h)
+        val transitions: (alpha * int) list = get_transitions (au, h)
+        val au': automaton =
+          accum
+            (fn ((i: alpha, s: int), aut: automaton) =>
+               let
+                 val rec fail: int -> int = fn state =>
+                   if go (aut, state, i) <> ~1 then go (aut, state, i)
+                   else if state = 0 then 0
+                   else fail (get_failure (aut, state))
+               in
+                 add_finals
+                   ( set_failure (aut, s, fail failure)
+                   , s
+                   , get_finals (aut, fail failure)
+                   )
+               end) transitions au
+      in
+        iterate (au', t, (map (fn (p, q) => q) transitions) @ next)
+      end
 
-  fun construct_failure au =
+  fun construct_failure (au: automaton) : automaton =
     iterate (au, oflevel1 au, [])
 
-  fun construct_automaton rules =
+  fun construct_automaton (rules: Parser.rule list) : automaton =
     let
       val t1 = (* Trie & final state values *)
         accum
-          (fn (Rule (n, _, r, p, _, _), a) => add_pattern (a, n, r, p, 0, 1))
-          rules (empty_automaton ())
+          (fn ( Rule (n: int, _, r: Parser.symbol, p: Parser.tree_pattern, _, _)
+              , a: automaton
+              ) => add_pattern (a, n, r, p, 0, 1)) rules (empty_automaton ())
     in
       construct_failure t1 (* Failure & final state values *)
     end
@@ -248,17 +259,17 @@ struct
     | arc2str (Child n) =
         "(ARC " ^ (int2str n) ^ ")"
 
-  fun output_symbols (out, symbols) =
+  fun output_symbols (out: string -> unit, symbols: Parser.symbol list) =
     ( out "datatype symbols = ARC of int"
     ; map (fn s => out (" | " ^ (symbol2str s))) symbols
     ; out "\n"
     )
 
-  fun output_finals' (out, au, n) =
+  fun output_finals' (out: string -> unit, au: automaton, n: int) =
     if n <= last_state au then
       let
-        val finals = get_finals (au, n)
-        fun outfinal (i, j, s) =
+        val finals: (int * int * Parser.symbol) list = get_finals (au, n)
+        fun outfinal (i: int, j: int, s: Parser.symbol) =
           ( out "("
           ; out (int2str i)
           ; out ","
@@ -280,22 +291,22 @@ struct
     else
       ()
 
-  fun output_finals (out, au) =
+  fun output_finals (out: string -> unit, au: automaton) : unit =
     ( out "fun get_finals s =\n"
     ; out "  case s of\n"
     ; output_finals' (out, au, 0)
     ; out "_ => nil\n\n"
     )
 
-  fun output_goto' (out, au, n) =
+  fun output_goto' (out: string -> unit, au: automaton, n: int) : unit =
     if n <= last_state au then
       let
-        val transitions = get_transitions (au, n)
+        val transitions: (alpha * int) list = get_transitions (au, n)
       in
         out (int2str n);
         out " => (case a of ";
         app
-          (fn (i, s) =>
+          (fn (i: alpha, s: int) =>
              (out (arc2str i); out " => "; out (int2str s); out " | "))
           transitions;
         out " _ => ";
@@ -307,14 +318,16 @@ struct
     else
       ()
 
-  fun output_goto (out, au) =
+  fun output_goto (out: string -> unit, au: automaton) : unit =
     ( out "fun go (s,a) =\n"
     ; out "  case s of\n"
     ; output_goto' (out, au, 0)
     ; out "_ => 0\n\n"
     )
 
-  fun output_automaton (outstr, au, symbols) =
+  fun output_automaton
+    (outstr: TextIO.outstream, au: automaton, symbols: Parser.symbol list) :
+    unit =
     let
       val out = fn s => TextIO.output (outstr, s)
     in
@@ -326,7 +339,11 @@ struct
       out "type state = int\n"
     end
 
-  fun build_automaton (outstr, symbols, rules) =
+  fun build_automaton
+    ( outstr: TextIO.outstream
+    , symbols: Parser.symbol list
+    , rules: Parser.rule list
+    ) : unit =
     output_automaton (outstr, construct_automaton rules, symbols)
 
 end
