@@ -71,60 +71,93 @@ struct
     structure Parser: PARSER = Parser
     open Parser
     datatype alpha = Sym of symbol | Child of int
-    type state = ((int * int * symbol) list * (alpha * int) list * int)
-    type automaton = state Array.array * int * int
+    type state =
+      { finals: (int * int * symbol) list
+      , transitions: (alpha * int) list
+      , failure: int
+      }
+    val empty_state: state = {finals = [], transitions = [], failure = 0}
+    type automaton = {states: state Array.array, size: int, counter: int}
 
     fun empty_automaton () =
-      (Array.array (400, ([], [], 0)), 400, 1)
+      {states = Array.array (400, empty_state), size = 400, counter = 1}
 
-    fun add_arc (trie as (a, b, c), i, iota) =
+    fun add_arc (trie as {states, size, counter}, i, iota) =
       let
-        val (fs, ts, f) = Array.sub (a, i)
+        val {finals = finals, transitions = transitions, failure = failure} =
+          Array.sub (states, i)
         fun go nil = ~1
           | go ((on, to) :: t) =
               if iota = on then to else go t
-        val destination = go ts
+        val destination = go transitions
       in
         if destination <> ~1 then
           (trie, destination)
-        else if b = c then
+        else if size = counter then
           let
-            val newsize = b * 3 div 2
-            val newa: state array = Array.array (newsize, ([], [], 0))
+            val newsize = size * 3 div 2
+            val newstates: state array = Array.array (newsize, empty_state)
             val rec copya =
-              fn 0 => Array.update (newa, 0, Array.sub (a, 0))
-               | n => (Array.update (newa, n, Array.sub (a, n)); copya (n - 1))
+              fn 0 => Array.update (newstates, 0, Array.sub (states, 0))
+               | n =>
+                ( Array.update (newstates, n, Array.sub (states, n))
+                ; copya (n - 1)
+                )
           in
-            copya (b - 1);
-            ((newa, newsize, c + 1), c)
+            copya (size - 1);
+            ( {states = newstates, size = newsize, counter = counter + 1}
+            , counter
+            )
           end
         else
-          (Array.update (a, i, (fs, (iota, c) :: ts, f)); ((a, b, c + 1), c))
+          ( Array.update
+              ( states
+              , i
+              , { finals = finals
+                , transitions = (iota, counter) :: transitions
+                , failure = failure
+                }
+              )
+          ; ({states = states, size = size, counter = counter + 1}, counter)
+          )
       end
 
-    fun set_failure (trie as (a, b, c), i, f) =
-      let val (fs, ts, f') = Array.sub (a, i)
-      in (Array.update (a, i, (fs, ts, f)); trie)
+    fun set_failure (trie as {states, ...}: automaton, i, failure) =
+      let
+        val {finals, transitions, ...} = Array.sub (states, i)
+      in
+        ( Array.update
+            ( states
+            , i
+            , {finals = finals, transitions = transitions, failure = failure}
+            )
+        ; trie
+        )
       end
 
-    fun add_finals (trie as (a, b, c), i, f) =
-      let val (fs, ts, s) = Array.sub (a, i)
-      in (Array.update (a, i, (f @ fs, ts, s)); trie)
+    fun add_finals (trie as {states, ...}: automaton, i, new_finals) =
+      let
+        val {finals, transitions, failure} = Array.sub (states, i)
+      in
+        ( Array.update
+            ( states
+            , i
+            , { finals = new_finals @ finals
+              , transitions = transitions
+              , failure = failure
+              }
+            )
+        ; trie
+        )
       end
 
-    fun get_finals ((a, b, c), i) =
-      let val (fs, ts, s) = Array.sub (a, i)
-      in fs
-      end
-    fun get_failure ((a, b, c), i) =
-      let val (fs, ts, s) = Array.sub (a, i)
-      in s
-      end
-    fun get_transitions ((a, b, c), i) =
-      let val (fs, ts, s) = Array.sub (a, i)
-      in ts
-      end
-    fun last_state (a, b, c) = c - 1
+    fun get_finals ({states, ...}: automaton, i) =
+      #finals (Array.sub (states, i))
+    fun get_failure ({states, ...}: automaton, i) =
+      #failure (Array.sub (states, i))
+    fun get_transitions ({states, ...}: automaton, i) =
+      #transitions (Array.sub (states, i))
+    fun last_state ({counter, ...}: automaton) = counter - 1
 
   end
 
