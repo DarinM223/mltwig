@@ -245,9 +245,15 @@ struct
     let
       val t1 = (* Trie & final state values *)
         accum
-          (fn ( Rule (n: int, _, r: Parser.symbol, p: Parser.tree_pattern, _, _)
+          (fn ( Rule
+                  { ruleno: int
+                  , replacement: Parser.symbol
+                  , pattern: Parser.tree_pattern
+                  , ...
+                  }
               , a: automaton
-              ) => add_pattern (a, n, r, p, 0, 1)) rules (empty_automaton ())
+              ) => add_pattern (a, ruleno, replacement, pattern, 0, 1)) rules
+          (empty_automaton ())
     in
       construct_failure t1 (* Failure & final state values *)
     end

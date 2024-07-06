@@ -52,16 +52,16 @@ struct
           (emit "val DC = ( "; app emit code; emit ") (map cost children)\n")
     ; emit "val ABORT = (fn () => raise MatchAbort)\n in\ncase n of\n  "
     ; app
-        (fn (Rule (n, _, _, p, Cost ss, _)) =>
-           ( emit (int2str n)
+        (fn (Rule {ruleno, pattern, cost = Cost ss, ...}) =>
+           ( emit (int2str ruleno)
            ; emit " => (case map cost children of "
-           ; emitlist (emit, index ([], labellist p))
+           ; emitlist (emit, index ([], labellist pattern))
            ; emit " => ("
            ; app emit ss
            ; emit ") | _ => raise InternalError \"S4\")\n  | "
            )
-          | (Rule (n, _, _, _, NoCost, _)) =>
-           (emit (int2str n); emit " => DC\n  | ")) rules
+          | (Rule {ruleno, cost = NoCost, ...}) =>
+           (emit (int2str ruleno); emit " => DC\n  | ")) rules
     ; emit "_ => raise InternalError \"S4.3.\"\nend\n\n"
     )
 
@@ -120,21 +120,28 @@ struct
         \ let open User\n"
     ; emit "in\ncase n of\n"
     ; app
-        (fn (Rule (n, t, Label l, p, _, Action ss)) =>
+        (fn (Rule
+               { ruleno
+               , ruletype
+               , replacement = Label l
+               , pattern
+               , action = Action ss
+               , ...
+               }) =>
            let
-             val labels = labellist p
+             val labels = labellist pattern
            in
-             emit (int2str n);
+             emit (int2str ruleno);
              emit " => ";
-             (case t of
+             (case ruletype of
                 Ordinary => emit ("X_" ^ l)
               | Topdown => emit ("X_" ^ l)
               | Rewrite => emit "XXXrewrite");
              if labels <> nil then
                ( emit " ( case "
-               ; (case t of
-                    Ordinary => emitval (emit, reftokens (labellist p))
-                  | Topdown => emitval (emit, DOreftokens (labellist p))
+               ; (case ruletype of
+                    Ordinary => emitval (emit, reftokens (labellist pattern))
+                  | Topdown => emitval (emit, DOreftokens (labellist pattern))
                   | Rewrite => emitval (emit, [("_", "()")]))
                ; emit " => "
                )
@@ -142,7 +149,7 @@ struct
                ();
              app emit ss;
              if labels <> nil then
-               case t of
+               case ruletype of
                  Ordinary => emit " | _ => raise InternalError \"S5\" )"
                | Topdown => emit " )"
                | Rewrite => emit " )"
@@ -160,8 +167,8 @@ struct
         "fun rewriterule (r:rule) =\n\
         \ case r of\n"
     ; app
-        (fn (Rule (n, Rewrite, _, _, _, _)) =>
-           (emit (int2str n); emit " => true |")
+        (fn (Rule {ruleno, ruletype = Rewrite, ...}) =>
+           (emit (int2str ruleno); emit " => true |")
           | _ => ()) rules
     ; emit "_ => false\n"
     )
@@ -190,17 +197,20 @@ struct
         List.foldl (op+) 0 (map leafs cs)
 
   fun emitmatches (_, nil) = ()
-    | emitmatches (emit, (Rule (n0, _, _, p, _, _) :: rules)) =
+    | emitmatches (emit, (Rule {ruleno, pattern, ...} :: rules)) =
         ( emit "val matchcounts = [\n"
         ; let
             val n =
-              ( emit ("(" ^ (int2str n0) ^ "," ^ (int2str (leafs p)) ^ ")")
+              ( emit
+                  ("(" ^ (int2str ruleno) ^ "," ^ (int2str (leafs pattern))
+                   ^ ")")
               ; accum
-                  (fn (Rule (n, _, _, p, _, _), m) =>
+                  (fn (Rule {ruleno, pattern, ...}, m) =>
                      ( emit
-                         (",\n(" ^ (int2str n) ^ "," ^ (int2str (leafs p)) ^ ")")
-                     ; if n > m then n else m
-                     )) rules n0
+                         (",\n(" ^ (int2str ruleno) ^ ","
+                          ^ (int2str (leafs pattern)) ^ ")")
+                     ; if ruleno > m then ruleno else m
+                     )) rules ruleno
               )
           in
             emit "]\nval matchtable = let val a = Array.array(";
@@ -263,8 +273,8 @@ struct
     )
 
   fun partition' (nil, u, n) = (u, n)
-    | partition' (Rule (r, _, l, Leaf s, _, _) :: t, u, n) =
-        partition' (t, (r, l, s) :: u, n)
+    | partition' (Rule {ruleno, replacement, pattern = Leaf s, ...} :: t, u, n) =
+        partition' (t, (ruleno, replacement, s) :: u, n)
     | partition' (r :: t, u, n) =
         partition' (t, u, r :: n)
 

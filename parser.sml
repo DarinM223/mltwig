@@ -12,42 +12,6 @@
 
 *)
 
-signature PARSER =
-sig
-
-  exception ParserError of string
-
-  datatype symbol = Node of string * int | Label of string
-
-  datatype cost =
-    Cost of string list
-  | NoCost
-  and action =
-    Action of string list
-  and tree_pattern =
-    Leaf of symbol
-  | Tree of (symbol * tree_pattern list)
-  and ruletype =
-    Ordinary
-  | Topdown
-  | Rewrite
-  and rule =
-    Rule of (int * ruletype * symbol * tree_pattern * cost * action)
-
-  datatype code_fragment = Prologue of string list | Insert of string list
-
-  val specification:
-    TextIO.instream
-    -> (code_fragment list * rule list * cost * string * string * symbol list)
-
-end
-
-(*
-   The parser is a straightforward predictive parser. It interfaces to the
-   lexer through the signature LEXER declared elsewhere. The symbol table
-   takes care of various book-keeping tasks of the parser and the
-   type checking of the symbols appearing in the rules of a specification.
-*)
 
 (* The symbol table is represented by an object of type stable. Declare_label
    and declare_node are used by the functions parsing node and label
@@ -147,6 +111,68 @@ struct
 end
 
 
+signature PARSER =
+sig
+
+  exception ParserError of string
+
+  datatype symbol = Node of string * int | Label of string
+
+  datatype cost =
+    Cost of string list
+  | NoCost
+  and action =
+    Action of string list
+  and tree_pattern =
+    Leaf of symbol
+  | Tree of (symbol * tree_pattern list)
+  and ruletype =
+    Ordinary
+  | Topdown
+  | Rewrite
+  and rule =
+    Rule of
+      { ruleno: int (* Unique id for a rule *)
+      , ruletype: ruletype (* Type of a rule *)
+      , replacement: symbol (* For the rule: Expr Plus(Expr,Expr), `replacement` is "Expr" *)
+      , pattern: tree_pattern
+      , cost: cost
+      , action: action (* Code fragments *)
+      }
+
+  datatype code_fragment = Prologue of string list | Insert of string list
+
+  (*
+  type parse_state =
+    { code_fragments: code_fragment list
+    , rules: rule list
+    , cost: cost
+    , name: string
+    }
+  type parse_rule_state =
+    { ruleno: int
+    , ruletype: ruletype
+    , replacement: symbol
+    , pattern: tree_pattern
+    , cost: cost
+    , internal: parse_state
+    , stable: Symboltable.stable
+    }
+    *)
+
+  val specification:
+    TextIO.instream
+    -> (code_fragment list * rule list * cost * string * string * symbol list)
+end
+
+(*
+   The parser is a straightforward predictive parser. It interfaces to the
+   lexer through the signature LEXER declared elsewhere. The symbol table
+   takes care of various book-keeping tasks of the parser and the
+   type checking of the symbols appearing in the rules of a specification.
+*)
+
+
 functor MAKEparser (structure Symboltable: SYMBOLTABLE and Lexer: LEXER): PARSER =
 struct
 
@@ -169,7 +195,14 @@ struct
   | Topdown
   | Rewrite
   and rule =
-    Rule of (int * ruletype * symbol * tree_pattern * cost * action)
+    Rule of
+      { ruleno: int (* Unique id for a rule *)
+      , ruletype: ruletype (* Type of a rule *)
+      , replacement: symbol (* For the rule: Expr Plus(Expr,Expr), `replacement` is "Expr" *)
+      , pattern: tree_pattern
+      , cost: cost
+      , action: action (* Code fragments *)
+      }
 
   datatype code_fragment = Prologue of string list | Insert of string list
 
@@ -201,7 +234,7 @@ struct
 
   fun treeref_string l = treeref_string' ("ir", l)
 
-  fun parsespecification (s, st) =
+  fun parsespecification (s, st: Symboltable.stable) =
     case lexer () of
       IDENTIFIER "prologue" => parse_prologue (s, st)
     | IDENTIFIER "insert" => parse_insert (s, st)
@@ -354,8 +387,17 @@ struct
       if lexer () <> SEMICOLON then
         error "missing semicolon"
       else
-        let val ps = Rule (rn, ty, nt, pattern, costcode, mlcode)
-        in parsespecification ((a, ps :: l, b, c), st)
+        let
+          val ps = Rule
+            { ruleno = rn
+            , ruletype = ty
+            , replacement = nt
+            , pattern = pattern
+            , cost = costcode
+            , action = mlcode
+            }
+        in
+          parsespecification ((a, ps :: l, b, c), st)
         end
     end
 
