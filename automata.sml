@@ -57,13 +57,13 @@ struct
     structure Parser: PARSER
     datatype alpha = Sym of Parser.symbol | Child of int
     type automaton
+    type final = {length: int, ruleno: int, nonterminal: Parser.symbol}
     val empty_automaton: unit -> automaton
     val add_arc: automaton * int * alpha -> automaton * int
-    val add_finals: automaton * int * (int * int * Parser.symbol) list
-                    -> automaton
+    val add_finals: automaton * int * final list -> automaton
     val set_failure: automaton * int * int -> automaton
     val get_failure: automaton * int -> int
-    val get_finals: automaton * int -> (int * int * Parser.symbol) list
+    val get_finals: automaton * int -> final list
     val get_transitions: automaton * int -> (alpha * int) list
     val last_state: automaton -> int
   end =
@@ -71,11 +71,9 @@ struct
     structure Parser: PARSER = Parser
     open Parser
     datatype alpha = Sym of symbol | Child of int
+    type final = {length: int, ruleno: int, nonterminal: Parser.symbol}
     type state =
-      { finals: (int * int * symbol) list
-      , transitions: (alpha * int) list
-      , failure: int
-      }
+      {finals: final list, transitions: (alpha * int) list, failure: int}
     val empty_state: state = {finals = [], transitions = [], failure = 0}
     type automaton = {states: state Array.array, size: int, counter: int}
 
@@ -177,8 +175,11 @@ struct
       automaton * int * Parser.symbol * Parser.tree_pattern * int * int
       -> automaton =
     fn (autom, rule1, nont, Leaf n, state, len) =>
-      let val (autom', state') = add_arc (autom, state, Sym n)
-      in add_finals (autom', state', [(len, rule1, nont)])
+      let
+        val (autom', state') = add_arc (autom, state, Sym n)
+      in
+        add_finals
+          (autom', state', [{length = len, ruleno = rule1, nonterminal = nont}])
       end
      | (autom, rule1, nont, Tree (n, cs), state, len) =>
       let
@@ -274,14 +275,14 @@ struct
   fun output_finals' (out: string -> unit, au: automaton, n: int) =
     if n <= last_state au then
       let
-        val finals: (int * int * Parser.symbol) list = get_finals (au, n)
-        fun outfinal (i: int, j: int, s: Parser.symbol) =
+        val finals: final list = get_finals (au, n)
+        fun outfinal {length: int, ruleno: int, nonterminal: Parser.symbol} =
           ( out "("
-          ; out (int2str i)
+          ; out (int2str length)
           ; out ","
-          ; out (int2str j)
+          ; out (int2str ruleno)
           ; out ","
-          ; out (symbol2str s)
+          ; out (symbol2str nonterminal)
           ; out ")"
           )
       in
