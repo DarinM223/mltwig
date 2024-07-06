@@ -40,7 +40,7 @@ local
       in
 	i :: parse_treeref' (tl r)
       end
-in  
+in
   val parse_treeref = (parse_treeref' o tl o explode)
 end
 
@@ -92,14 +92,14 @@ controllable=[a-zA-Z];
 <INITIAL>";" => (SEMICOLON);
 <INITIAL>"," => (COMMA);
 <INITIAL>"]" => (OTHER yytext);
-<INITIAL>"[" => (OTHER yytext);    
+<INITIAL>"[" => (OTHER yytext);
 <INITIAL>"..." => (OTHER yytext);
 <INITIAL>"#"{digit}+ => (OTHER yytext);
 
 <INITIAL>\"((\\([nt\\"]|([0-9]{3})|("^"[a-zA-Z])|([\ \t\n]+\\)))|[^\n\\"])*\"
  => (let val dummy = (current_line_number :=
-		      fold (fn (a,b) => b+(if a="\n" then 1 else 0))
-		      (explode yytext) (!current_line_number))
+		      List.foldl (fn (a,b) => b+(if a="\n" then 1 else 0))
+		      (!current_line_number) (explode yytext))
 	in
 	  OTHER yytext
 	end);
@@ -109,7 +109,7 @@ controllable=[a-zA-Z];
 <INITIAL>{whitespace}+ => (SPACE yytext);
 
 <INITIAL>{newline} => ( inc current_line_number; SPACE yytext);
-							   
+
 <INITIAL>"(*" => ( YYBEGIN C; inc commentlevel; SPACE yytext );
 
 <C>"(*" => ( inc commentlevel; SPACE yytext );

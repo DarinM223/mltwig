@@ -40,7 +40,7 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
     type Reg = extension ref
 
     fun reg2str (ref (Ext { name = s, ...})) = s
-	
+
     val registers =
       [Ext {name="r1",usage= ref 0, modif = ref false},
        Ext {name="r2",usage= ref 0, modif = ref false},
@@ -73,7 +73,7 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
     datatype rsr = UNUSED | REFERS of Reg
 
     val rsr = ref UNUSED
-	
+
     fun resultReg () =
       let val newreg = ref R0register
       in
@@ -107,10 +107,10 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
     fun calcula ((Ext{modif=ref true,...})::t,n,ac:int) = calcula (t,n+n,ac+n)
       | calcula ((Ext{modif=ref false,...})::t,n,ac) = calcula (t,n+n,ac)
       | calcula (_,_,ac:int) = ac
-	
+
     fun regmask() = calcula (registers, 2, 0)
-    
-  end  
+
+  end
 
   open Registers
 
@@ -167,8 +167,8 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
 
   fun equal (tree(i,s1,a1,_), tree(j,s2,a2,_)) =
     (i = j) andalso (a1 = a2) andalso (length s1 = length s2)
-     andalso (fold (fn (a,b) => a andalso b) (map2 equal (s1,s2)) true)
-       
+     andalso (List.foldl (fn (a,b) => a andalso b) true (map2 equal (s1,s2)))
+
   fun count_arguments (tree(ARG,[_,t],_,_)) = 1+(count_arguments t)
     | count_arguments _ = 0
 
@@ -176,13 +176,13 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
 
   fun child0 (tree(_,h :: _,_,_)) = h
     | child0 _ = fatal "no child 0"
-      
+
   fun child1 (tree(_,_ :: h :: _,_,_)) = h
     | child1 _ = fatal "no child 1"
-      
+
   fun child2 (tree(_,_ :: _ :: h :: _,_,_)) = h
     | child2 _ = fatal "no child 2"
-      
+
   fun get_kind (tree(_,_,_,{ kind = ref ir, ... })) = ir
 
   fun get_truebranch (tree(_,_,_,{ truebranch = ref l, ... })) = l
@@ -213,14 +213,14 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
   val get_size = (attrSize o pickAttrs)
   val get_ivalue = (attrIvalue o pickAttrs)
   val get_proclabel = (attrProclabel o pickAttrs)
-    
+
   val get_temp = (attrTemp o pickAttrs)
-    
+
   fun set_kind_n (tree(_,_,_,{ kind = ir, ... }), n) = ir := numbered n
   fun set_kind (tree(_,_,_,{ kind = ir, ... }), ope) = ir := Op ope
 
   fun set_truebranch (tree(_,_,_,{ truebranch = lr, ... }), l) = lr := l
-    
+
   fun get_sizecode (tree(_,_,_,{ sizcod = ref (unaryfun f), ...})) = f
     | get_sizecode _ = fatal "no attribute sizcod = ref unaryfun"
 
@@ -228,7 +228,7 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
     | get_sizecodecvt _ = fatal "no attribute sizcod = ref binaryfun"
 
   fun set_sizecode (tree(_,_,_,{sizcod = r,...}), s) = r := unaryfun s
-    
+
   fun set_sizecodecvt (tree(_,_,_,{sizcod = r,...}),s1,s2) =
     r := binaryfun (s1,s2)
 
@@ -263,7 +263,7 @@ ARC of int | XXXresult | XXXzero | XXXargs | XXXname | XXXcvtopu | XXXcvtop | XX
     (s+s2,t+t2,false,f orelse f2,false,0,0,ref false,0)
 
   fun sum_costs [] = zerocost
-  | sum_costs (h :: t) = fold (fn (a,b) => cost_plus (a,b)) t h
+  | sum_costs (h :: t) = List.foldl (fn (a,b) => cost_plus (a,b)) h t
 
   fun cost_less ((s1,t1,_,_,_,_,_,_,_):cost, (s2,t2,_,_,_,_,_,_,_):cost) =
     (s1+t1) < (s2+t2)

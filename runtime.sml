@@ -48,9 +48,6 @@ fun revfold _ [] b = b
         f2 (a, r, b)
       end
 
-fun fold f l init =
-  List.foldl f init l
-
 exception NthTail
 exception Nth
 

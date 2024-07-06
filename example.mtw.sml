@@ -3,6 +3,8 @@ struct
   structure User =
   struct
     datatype symbol = ARC of int | XXXExpr | Const | Mul | Minus | Plus
+
+
     (* The type and function definitions                   *)
     val showSymbol =
       fn ARC t0 => "ARC " ^ "(" ^ Int.toString t0 ^ ")"
@@ -17,9 +19,8 @@ struct
     local
       val rec tree = fn tree_0 =>
         fn Tree (t0, t1, t2) =>
-          "Tree "
-          ^ "(" ^ String.concatWith ", " [tree_0 t0, showSymbol t1, tree_0 t2]
-          ^ ")"
+          "Tree " ^ "("
+          ^ String.concatWith ", " [tree_0 t0, showSymbol t1, tree_0 t2] ^ ")"
          | Leaf t3 => "Leaf " ^ "(" ^ Int.toString t3 ^ ")"
       val tree = fn () => let val rec tree_0 = fn ? => tree tree_0 ?
                           in tree_0
@@ -48,8 +49,8 @@ struct
     val showResult =
       fn XXXrewrite t0 => "XXXrewrite " ^ "(" ^ showTree t0 ^ ")"
        | X_Expr t1 =>
-        "X_Expr " ^ "("
-        ^ "[" ^ String.concatWith ", " (List.map showInstr t1) ^ "]" ^ ")"
+        "X_Expr " ^ "(" ^ "[" ^ String.concatWith ", " (List.map showInstr t1)
+        ^ "]" ^ ")"
   end
 
   structure Specification =
@@ -69,7 +70,7 @@ struct
     fun execute_cost (n: rule, ir, children) =
       let
         open User
-        val DC = (fn subexprcost => fold (op+) subexprcost 0)
+        val DC = (fn subexprcost => List.foldl (op+) 0 subexprcost)
           (map cost children)
         val ABORT = (fn () => raise MatchAbort)
       in
@@ -284,4 +285,4 @@ struct
   exception NoCover = Internal.NoCover
   exception InternalError = Internal.InternalError
   val translate = Internal.translate
-end
+end;

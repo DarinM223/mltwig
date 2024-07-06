@@ -5,7 +5,7 @@
    node   Const(0);
 
    prologue (
-   
+
    (* The type and function definitions                   *)
 
       datatype tree = Tree of (tree * symbol * tree) | Leaf of int
@@ -22,17 +22,17 @@
    );
 
    label Expr of instr list;
-   
-   default_cost( fn subexprcost => fold (op +) subexprcost 0);
+
+   default_cost( fn subexprcost => List.foldl (op +) 0 subexprcost);
 
    (* Rules                                               *)
 
    Expr Const            =([PUSH (constValue $$)]);
-   
+
    Expr Plus(Expr,Expr) :   (2+Expr1+Expr2) =(Expr1@Expr2@[PLUS]);
-   
+
    Expr Minus(Expr,Expr) :  (2+Expr1+Expr2) =(Expr1@Expr2@[MINUS]);
-   
+
    Expr Mul(Expr,Expr) :    (2+DC)          =(Expr1@Expr2@[MUL]);
 
    Expr Mul(Expr,Plus(Expr,Expr)) : (3+DC)  =(Expr1@Expr2@Expr3@[PLUSMUL]);
