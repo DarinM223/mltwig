@@ -19,8 +19,9 @@ struct
     local
       val rec tree = fn tree_0 =>
         fn Tree (t0, t1, t2) =>
-          "Tree " ^ "("
-          ^ String.concatWith ", " [tree_0 t0, showSymbol t1, tree_0 t2] ^ ")"
+          "Tree "
+          ^ "(" ^ String.concatWith ", " [tree_0 t0, showSymbol t1, tree_0 t2]
+          ^ ")"
          | Leaf t3 => "Leaf " ^ "(" ^ Int.toString t3 ^ ")"
       val tree = fn () => let val rec tree_0 = fn ? => tree tree_0 ?
                           in tree_0
@@ -49,8 +50,8 @@ struct
     val showResult =
       fn XXXrewrite t0 => "XXXrewrite " ^ "(" ^ showTree t0 ^ ")"
        | X_Expr t1 =>
-        "X_Expr " ^ "(" ^ "[" ^ String.concatWith ", " (List.map showInstr t1)
-        ^ "]" ^ ")"
+        "X_Expr " ^ "("
+        ^ "[" ^ String.concatWith ", " (List.map showInstr t1) ^ "]" ^ ")"
   end
 
   structure Specification =
