@@ -201,13 +201,17 @@ struct
           autom
         end
 
-  fun go (au: automaton, s: int, i: alpha) : int =
+  (* Steps the automaton with the given alpha (symbol or child). If the transition
+     doesn't exist, then it returns -1.
+  *)
+  fun step_automaton (au: automaton, s: int, i: alpha) : int =
     let
       val transitions: (alpha * int) list = get_transitions (au, s)
-      val rec go' =
-        fn nil => ~1 | ((p: alpha, q: int) :: t) => if p = i then q else go' t
+      fun go [] = ~1
+        | go ((p: alpha, q: int) :: rest) =
+            if p = i then q else go rest
     in
-      go' transitions
+      go transitions
     end
 
   fun oflevel1 (au: automaton) : int list =
@@ -230,9 +234,12 @@ struct
                 (fn ((i: alpha, s: int), autom: automaton) =>
                    let
                      val rec fail: int -> int = fn state =>
-                       if go (autom, state, i) <> ~1 then go (autom, state, i)
-                       else if state = 0 then 0
-                       else fail (get_failure (autom, state))
+                       if step_automaton (autom, state, i) <> ~1 then
+                         step_automaton (autom, state, i)
+                       else if state = 0 then
+                         0
+                       else
+                         fail (get_failure (autom, state))
                    in
                      add_finals
                        ( set_failure (autom, s, fail failure)
