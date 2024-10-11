@@ -38,6 +38,8 @@ sig
   val go_f: state * symbol -> (int * rule * symbol) list
 end
 
+(* This is the same as List.foldl but with the arguments reversed *)
+(* TODO: replace all uses of revfold with accum *)
 fun revfold _ [] b = b
   | revfold f (a :: r) b =
       let
@@ -190,13 +192,14 @@ struct
     , ss: skeletal list
     , t: tree
     , ac: (symbol * skeletal) list
-    ) =
+    ) : (symbol * skeletal) list =
     accum
-      (fn (Chain (r, n, cs), ac') =>
-         let val skel = build_skeleton (r, t, ss)
-         in get_closure (cs, [skel], t, insert (n, skel, ac'))
-         end
-         handle MatchAbort => ac') ct ac
+      (fn ( Chain (rule, symbol, cs: matchtree list)
+          , ac': (symbol * skeletal) list
+          ) => let val skel = build_skeleton (rule, t, ss)
+               in get_closure (cs, [skel], t, insert (symbol, skel, ac'))
+               end
+               handle MatchAbort => ac') ct ac
 
   val rec someone: tree * skeletal * skeletal match list -> skeletal list =
     fn (tree, still_best, nil) => [still_best]
@@ -229,7 +232,8 @@ struct
     fn (tree, nil) => internal "matcher state inconsistent. lba."
      | (tree, l) => still_no_one (tree, l)
 
-  fun skeletons_of (state: state, node: tree, table: skeletal table) =
+  fun skeletons_of (state: state, node: tree, table: skeletal table) :
+    skeletal table * (symbol * skeletal) list =
     let
       val (t: skeletal table, s: (symbol * skeletal) list) =
         case get_subtrees node of
@@ -313,12 +317,17 @@ struct
     end
 
   fun translate (t: tree) : result =
-    execute
-      (case (skeletons_of (initialstate, t, empty_table ())) of
-         (_, (_, s) :: t) =>
-           accum
-             (fn ((n, s), bs) => if cost_less (cost s, cost bs) then s else bs)
-             t s
-       | (_, nil) => raise NoCover)
+    let
+      val (_, closure) = skeletons_of (initialstate, t, empty_table ())
+      val skeletal =
+        case closure of
+          (_, s) :: t =>
+            accum
+              (fn ((n, s), bs) => if cost_less (cost s, cost bs) then s else bs)
+              t s
+        | nil => raise NoCover
+    in
+      execute skeletal
+    end
 
 end
