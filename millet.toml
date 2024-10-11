@@ -1,6 +1,6 @@
 version = 1
 [workspace]
-root = "mltwig.mlb"
+root = "testmltwig.mlb"
 [diagnostics]
 5029.severity = "ignore"
 5033.severity = "ignore"

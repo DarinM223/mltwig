@@ -82,16 +82,17 @@ struct
 
   structure Representation:
   sig
-    type 's table
     structure Spec: TWIG_SPECIFICATION
+    type 's match =
+      {rule: Spec.rule, num_matches: int, children_skeletons: 's list}
+    type 's match_info = (Spec.symbol * 's match list) list
+    type 's table
 
     val empty_table: unit -> 's table
     val new_level: 's table -> 's table
     val contribute0: 's table * int * Spec.rule * Spec.symbol -> 's table
     val contribute1: 's table * int * Spec.rule * Spec.symbol * 's -> 's table
-    val get_level:
-      's table
-      -> (Spec.symbol * (Spec.rule * int * 's list) list) list * 's table
+    val get_level: 's table -> 's match_info * 's table
   end =
   struct
 
@@ -108,24 +109,37 @@ struct
 
     open Spec
 
-    type 's table = (symbol * (rule * int * 's list) list) list list
+    type 's match = {rule: rule, num_matches: int, children_skeletons: 's list}
+    type 's match_info = (symbol * 's match list) list
+    type 's table = 's match_info list
     fun empty_table () = []
     fun new_level l = [] :: l
-    fun insert0' (r: rule, nil) = [(r, 1, [])]
-      | insert0' (r: rule, (h as (r', m', s')) :: hs) =
-          if r' <> r then h :: insert0' (r, hs) else (r, m' + 1, s') :: hs
+    fun insert0' (r: rule, nil) =
+          [{rule = r, num_matches = 1, children_skeletons = []}]
+      | insert0'
+          ( r: rule
+          , (h as {rule = r', num_matches = m', children_skeletons = s'}) :: hs
+          ) =
+          if r' <> r then h :: insert0' (r, hs)
+          else {rule = r, num_matches = m' + 1, children_skeletons = s'} :: hs
     fun insert0 (nil, r, t: symbol) =
-          [(t, [(r, 1, [])])]
+          [(t, [{rule = r, num_matches = 1, children_skeletons = []}])]
       | insert0 ((h as (t', a)) :: hs, r, t) =
           if t' <> t then h :: insert0 (hs, r, t)
           else (t, insert0' (r, a)) :: hs
     fun insert1' (r: rule, s, nil) =
-          [(r, 1, [s])]
-      | insert1' (r, s, (h as (r', m', s')) :: hs) =
-          if r' <> r then h :: insert1' (r, s, hs)
-          else (r, m' + 1, s :: s') :: hs
+          [{rule = r, num_matches = 1, children_skeletons = [s]}]
+      | insert1'
+          ( r
+          , s
+          , (h as {rule = r', num_matches = m', children_skeletons = s'}) :: hs
+          ) =
+          if r' <> r then
+            h :: insert1' (r, s, hs)
+          else
+            {rule = r, num_matches = m' + 1, children_skeletons = s :: s'} :: hs
     fun insert1 (nil, r, t: symbol, s) =
-          [(t, [(r, 1, [s])])]
+          [(t, [{rule = r, num_matches = 1, children_skeletons = [s]}])]
       | insert1 ((h as (t', a)) :: hs, r, t, s) =
           if t' <> t then h :: insert1 (hs, r, t, s)
           else (t, insert1' (r, s, a)) :: hs
@@ -151,14 +165,17 @@ struct
 
   fun cost (Skeleton (_, c, _, _)) = c
 
-  fun insert (i: symbol, s, nil) = [(i, s)]
-    | insert (i, s, (head as (i', s')) :: rest) =
-        if i = i' then
-          if cost_less (cost s, cost s') then (i, s) :: rest else head :: rest
-        else
-          head :: (insert (i, s, rest))
+  val rec
+    insert: symbol * skeletal * (symbol * skeletal) list
+            -> (symbol * skeletal) list =
+    fn (i: symbol, s: skeletal, nil) => [(i, s)]
+     | (i: symbol, s: skeletal, (head as (i', s')) :: rest) =>
+      if i = i' then
+        if cost_less (cost s, cost s') then (i, s) :: rest else head :: rest
+      else
+        head :: (insert (i, s, rest))
 
-  fun build_skeleton (ar as (r, t, cs)) =
+  fun build_skeleton (ar as (r: rule, t: tree, cs: skeletal list)) : skeletal =
     Skeleton (r, execute_cost ar, t, rev cs)
 
   (* get_closure takes four arguments. The first is a unit rule tree.
@@ -168,7 +185,12 @@ struct
   the first element is the number of the non-terminal of the rule,
   and the second element is the skeleton. *)
 
-  fun get_closure (ct, ss, t, ac) =
+  fun get_closure
+    ( ct: matchtree list
+    , ss: skeletal list
+    , t: tree
+    , ac: (symbol * skeletal) list
+    ) =
     accum
       (fn (Chain (r, n, cs), ac') =>
          let val skel = build_skeleton (r, t, ss)
@@ -176,46 +198,50 @@ struct
          end
          handle MatchAbort => ac') ct ac
 
-  fun someone (t, still_best, nil) = [still_best]
-    | someone (t, still_best, (r, m, cs) :: rest) =
-        if matches r = m then
-          let
-            val skel = build_skeleton (r, t, cs)
-          in
-            someone
-              ( t
-              , if cost_less (cost skel, cost still_best) then skel
-                else still_best
-              , rest
-              )
-          end
-          handle MatchAbort => someone (t, still_best, rest)
-        else
-          someone (t, still_best, rest)
+  val rec someone: tree * skeletal * skeletal match list -> skeletal list =
+    fn (tree, still_best, nil) => [still_best]
+     | (tree, still_best, {rule, num_matches, children_skeletons} :: rest) =>
+      if matches rule = num_matches then
+        let
+          val skel = build_skeleton (rule, tree, children_skeletons)
+        in
+          someone
+            ( tree
+            , if cost_less (cost skel, cost still_best) then skel
+              else still_best
+            , rest
+            )
+        end
+        handle MatchAbort => someone (tree, still_best, rest)
+      else
+        someone (tree, still_best, rest)
 
-  fun still_no_one (t, nil) = nil
-    | still_no_one (t, (r, m, cs) :: rest) =
-        if matches r = m then
-          someone (t, build_skeleton (r, t, cs), rest)
-          handle MatchAbort => still_no_one (t, rest)
-        else
-          still_no_one (t, rest)
+  val rec still_no_one: tree * skeletal match list -> skeletal list =
+    fn (tree, nil) => nil
+     | (tree, {rule, num_matches, children_skeletons} :: rest) =>
+      if matches rule = num_matches then
+        someone (tree, build_skeleton (rule, tree, children_skeletons), rest)
+        handle MatchAbort => still_no_one (tree, rest)
+      else
+        still_no_one (tree, rest)
 
-  fun leave_best_alone (t, nil) =
-        internal "matcher state inconsistent. lba."
-    | leave_best_alone (t, l) = still_no_one (t, l)
+  val leave_best_alone: tree * skeletal match list -> skeletal list =
+    fn (tree, nil) => internal "matcher state inconsistent. lba."
+     | (tree, l) => still_no_one (tree, l)
 
-  fun skeletons_of (state, node, tab) =
+  fun skeletons_of (state: state, node: tree, table: skeletal table) =
     let
-      val (t, s) =
+      val (t: skeletal table, s: (symbol * skeletal) list) =
         case get_subtrees node of
           nil =>
             let
-              val tab' =
-                accum (fn ((h, r, n), t) => contribute0 (t, h - 1, r, n))
-                  (go_f (state, node_value node)) tab
+              val table' =
+                accum
+                  (fn ((h: int, r: rule, n: symbol), t) =>
+                     contribute0 (t, h - 1, r, n))
+                  (go_f (state, node_value node)) table
             in
-              ( tab'
+              ( table'
               , get_closure ((unitmatches o node_value) node, [], node, [])
               )
             end
@@ -224,24 +250,26 @@ struct
               val state' = go (state, node_value node)
               val (table, _) =
                 accum
-                  (fn (l, (t, i)) =>
+                  (fn (l: tree, (t: skeletal table, i: int)) =>
                      let
                        val state'' = go (state', childsymbol i)
-                       val (t', ss) = skeletons_of (state'', l, t)
+                       val (t': skeletal table, ss: (symbol * skeletal) list) =
+                         skeletons_of (state'', l, t)
                      in
                        ( accum
-                           (fn ((r, s), t'') =>
+                           (fn ((r: symbol, s: skeletal), t'': skeletal table) =>
                               let
-                                val finals = go_f (state'', r)
+                                val finals: (int * rule * symbol) list =
+                                  go_f (state'', r)
                               in
                                 accum
-                                  (fn ((h, r, n), t''') =>
+                                  (fn ((h: int, r: rule, n: symbol), t''') =>
                                      contribute1 (t''', h - 1, r, n, s)) finals
                                   t''
                               end) ss t'
                        , i + 1
                        )
-                     end) ls (new_level tab, 1)
+                     end) ls (new_level table, 1)
               val (toplevel, table') = get_level table
             in
               ( table'
@@ -251,8 +279,9 @@ struct
                       (fn ((_, nil), l) => l
                         | ((n, [e]), l) => (n, e) :: l
                         | _ => internal "inconsistency. 01l")
-                      (map (fn (n, sl) => (n, leave_best_alone (node, sl)))
-                         toplevel) nil
+                      (map
+                         (fn (n: symbol, sl: skeletal match list) =>
+                            (n, leave_best_alone (node, sl))) toplevel) nil
                 in
                   accum
                     (fn ((n, s), al) =>
@@ -266,7 +295,7 @@ struct
         [] => (t, [])
       | [(_, S as Skeleton (r, _, _, _))] =>
           if rewriterule r then
-            skeletons_of (state, (getreplacement o execute) S, tab)
+            skeletons_of (state, (getreplacement o execute) S, table)
           else
             (t, s)
       | (_, sk) :: rest =>
@@ -277,13 +306,13 @@ struct
                    if cost_less (cost s, cost bs) then s else bs) rest sk
           in
             if rewriterule r then
-              skeletons_of (state, (getreplacement o execute) best, tab)
+              skeletons_of (state, (getreplacement o execute) best, table)
             else
               (t, s)
           end
     end
 
-  fun translate t =
+  fun translate (t: tree) : result =
     execute
       (case (skeletons_of (initialstate, t, empty_table ())) of
          (_, (_, s) :: t) =>
@@ -292,4 +321,4 @@ struct
              t s
        | (_, nil) => raise NoCover)
 
-end;
+end
