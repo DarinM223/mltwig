@@ -20,6 +20,7 @@ sig
                        -> unit
 end
 
+(* Replace uses with List.foldl *)
 fun revfold _ [] b = b
   | revfold f (a :: r) b =
       let

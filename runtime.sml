@@ -38,18 +38,6 @@ sig
   val go_f: state * symbol -> (int * rule * symbol) list
 end
 
-(* This is the same as List.foldl but with the arguments reversed *)
-(* TODO: replace all uses of revfold with accum *)
-fun revfold _ [] b = b
-  | revfold f (a :: r) b =
-      let
-        fun f2 (e, [], b) = f (e, b)
-          | f2 (e, a :: r, b) =
-              f2 (a, r, f (e, b))
-      in
-        f2 (a, r, b)
-      end
-
 exception NthTail
 exception Nth
 
@@ -163,8 +151,6 @@ struct
 
   (* Utility functions *)
 
-  val accum = revfold
-
   fun cost (Skeleton (_, c, _, _)) = c
 
   val rec
@@ -193,13 +179,13 @@ struct
     , t: tree
     , ac: (symbol * skeletal) list
     ) : (symbol * skeletal) list =
-    accum
+    List.foldl
       (fn ( Chain (rule, symbol, cs: matchtree list)
           , ac': (symbol * skeletal) list
           ) => let val skel = build_skeleton (rule, t, ss)
                in get_closure (cs, [skel], t, insert (symbol, skel, ac'))
                end
-               handle MatchAbort => ac') ct ac
+               handle MatchAbort => ac') ac ct
 
   val rec someone: tree * skeletal * skeletal match list -> skeletal list =
     fn (tree, still_best, nil) => [still_best]
@@ -240,10 +226,10 @@ struct
           nil =>
             let
               val table' =
-                accum
+                List.foldl
                   (fn ((h: int, r: rule, n: symbol), t) =>
-                     contribute0 (t, h - 1, r, n))
-                  (go_f (state, node_value node)) table
+                     contribute0 (t, h - 1, r, n)) table
+                  (go_f (state, node_value node))
             in
               ( table'
               , get_closure ((unitmatches o node_value) node, [], node, [])
@@ -253,41 +239,41 @@ struct
             let
               val state' = go (state, node_value node)
               val (table, _) =
-                accum
+                List.foldl
                   (fn (l: tree, (t: skeletal table, i: int)) =>
                      let
                        val state'' = go (state', childsymbol i)
                        val (t': skeletal table, ss: (symbol * skeletal) list) =
                          skeletons_of (state'', l, t)
                      in
-                       ( accum
+                       ( List.foldl
                            (fn ((r: symbol, s: skeletal), t'': skeletal table) =>
                               let
                                 val finals: (int * rule * symbol) list =
                                   go_f (state'', r)
                               in
-                                accum
+                                List.foldl
                                   (fn ((h: int, r: rule, n: symbol), t''') =>
-                                     contribute1 (t''', h - 1, r, n, s)) finals
-                                  t''
-                              end) ss t'
+                                     contribute1 (t''', h - 1, r, n, s)) t''
+                                  finals
+                              end) t' ss
                        , i + 1
                        )
-                     end) ls (new_level table, 1)
+                     end) (new_level table, 1) ls
               val (toplevel, table') = get_level table
             in
               ( table'
               , let
                   val unclosurized =
-                    accum
+                    List.foldl
                       (fn ((_, nil), l) => l
                         | ((n, [e]), l) => (n, e) :: l
-                        | _ => internal "inconsistency. 01l")
-                      (map
+                        | _ => internal "inconsistency. 01l") nil
+                      (List.map
                          (fn (n: symbol, sl: skeletal match list) =>
-                            (n, leave_best_alone (node, sl))) toplevel) nil
+                            (n, leave_best_alone (node, sl))) toplevel)
                 in
-                  accum
+                  List.foldl
                     (fn ((n, s), al) =>
                        get_closure (unitmatches n, [s], node, al)) unclosurized
                     unclosurized
@@ -305,9 +291,9 @@ struct
       | (_, sk) :: rest =>
           let
             val best as Skeleton (r, _, _, _) =
-              accum
-                (fn ((n, s), bs) =>
-                   if cost_less (cost s, cost bs) then s else bs) rest sk
+              List.foldl
+                (fn ((_, s), bs) =>
+                   if cost_less (cost s, cost bs) then s else bs) sk rest
           in
             if rewriterule r then
               skeletons_of (state, (getreplacement o execute) best, table)
@@ -322,9 +308,9 @@ struct
       val skeletal =
         case closure of
           (_, s) :: t =>
-            accum
+            List.foldl
               (fn ((n, s), bs) => if cost_less (cost s, cost bs) then s else bs)
-              t s
+              s t
         | nil => raise NoCover
     in
       execute skeletal
