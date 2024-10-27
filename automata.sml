@@ -20,17 +20,6 @@ sig
                        -> unit
 end
 
-(* Replace uses with List.foldl *)
-fun revfold _ [] b = b
-  | revfold f (a :: r) b =
-      let
-        fun f2 (e, [], b) = f (e, b)
-          | f2 (e, a :: r, b) =
-              f2 (a, r, f (e, b))
-      in
-        f2 (a, r, b)
-      end
-
 (* This is the second version of ML-Twig Automata Builder.
 We note, that the first version was purely functional (without side-effects)
 and was based on a general structure constructing Aho-Corasick automata
@@ -164,10 +153,6 @@ struct
 
   open Implementation Parser
 
-  val int2str: int -> string = Int.toString
-
-  val accum: ('a * 'b -> 'b) -> 'a list -> 'b -> 'b = revfold
-
   (* This function traverses a tree pattern and concurrently adds arcs
      to the trie representation of a tree pattern matching automaton. *)
 
@@ -187,7 +172,7 @@ struct
         let
           val (autom, state) = add_arc (autom, state, Sym n)
           val (autom, _) =
-            accum
+            List.foldl
               (fn (child_pattern: Parser.tree_pattern, (autom, child_number)) =>
                  let
                    val (autom, state) =
@@ -197,7 +182,7 @@ struct
                        (autom, rule1, nont, child_pattern, state, len + 1)
                    , child_number + 1
                    )
-                 end) children (autom, 1)
+                 end) (autom, 1) children
         in
           autom
         end
@@ -231,7 +216,7 @@ struct
             val transitions: (alpha * int) list =
               get_transitions (autom, from_root)
             val autom: automaton =
-              accum
+              List.foldl
                 (fn ((i: alpha, s: int), autom: automaton) =>
                    let
                      val rec fail: int -> int = fn state =>
@@ -247,7 +232,7 @@ struct
                        , s
                        , get_finals (autom, fail failure)
                        )
-                   end) transitions autom
+                   end) autom transitions
           in
             iterate (autom, rest, (map (fn (p, q) => q) transitions) @ next)
           end
@@ -258,7 +243,7 @@ struct
   fun construct_automaton (rules: Parser.rule list) : automaton =
     let
       val trie: automaton = (* Trie & final state values *)
-        accum
+        List.foldl
           (fn ( Rule
                   { ruleno: int
                   , replacement: Parser.symbol
@@ -266,8 +251,8 @@ struct
                   , ...
                   }
               , a: automaton
-              ) => add_pattern (a, ruleno, replacement, pattern, 0, 1)) rules
-          (empty_automaton ())
+              ) => add_pattern (a, ruleno, replacement, pattern, 0, 1))
+          (empty_automaton ()) rules
     in
       construct_failure trie (* Failure & final state values *)
     end
@@ -277,7 +262,7 @@ struct
 
   fun arc2str (Sym s) = symbol2str s
     | arc2str (Child n) =
-        "(ARC " ^ (int2str n) ^ ")"
+        "(ARC " ^ Int.toString n ^ ")"
 
   fun output_symbols (out: string -> unit, symbols: Parser.symbol list) =
     ( out "datatype symbols = ARC of int"
@@ -291,15 +276,15 @@ struct
         val finals: final list = get_finals (au, n)
         fun outfinal {length: int, ruleno: int, nonterminal: Parser.symbol} =
           ( out "("
-          ; out (int2str length)
+          ; out (Int.toString length)
           ; out ","
-          ; out (int2str ruleno)
+          ; out (Int.toString ruleno)
           ; out ","
           ; out (symbol2str nonterminal)
           ; out ")"
           )
       in
-        out (int2str n);
+        out (Int.toString n);
         out " => [";
         case finals of
           nil => ()
@@ -323,15 +308,15 @@ struct
       let
         val transitions: (alpha * int) list = get_transitions (au, n)
       in
-        out (int2str n);
+        out (Int.toString n);
         out " => (case a of ";
         app
           (fn (i: alpha, s: int) =>
-             (out (arc2str i); out " => "; out (int2str s); out " | "))
+             (out (arc2str i); out " => "; out (Int.toString s); out " | "))
           transitions;
         out " _ => ";
         if n = 0 then (out "0")
-        else (out "go ("; out (int2str (get_failure (au, n))); out ",a)");
+        else (out "go ("; out (Int.toString (get_failure (au, n))); out ",a)");
         out ")\n  | ";
         output_goto' (out, au, n + 1)
       end

@@ -11,28 +11,23 @@ struct
 
   open Parser Automata
 
-  val int2str: int -> string = Int.toString
-
-  val accum = revfold
-
   fun count (a, nil) = 0
     | count (a, h :: t) =
         (if a = h then 1 else 0) + count (a, t)
 
-  fun member p =
-    (count p) <> 0
+  fun member p = count p <> 0
 
   (* Output *)
 
   fun labellist (Leaf (Label l)) = [l]
     | labellist (Tree (_, cs)) =
-        accum (fn (c, ac) => ac @ (labellist c)) cs []
+        List.foldl (fn (c, ac) => ac @ (labellist c)) [] cs
     | labellist _ = []
 
   fun index (passed, nil) = []
     | index (passed, h :: t) =
         (if member (h, passed) orelse member (h, t) then
-           h ^ (int2str (count (h, passed) + 1))
+           h ^ (Int.toString (count (h, passed) + 1))
          else
            h) :: (index (h :: passed, t))
 
@@ -53,7 +48,7 @@ struct
     ; emit "val ABORT = (fn () => raise MatchAbort)\n in\ncase n of\n  "
     ; app
         (fn (Rule {ruleno, pattern, cost = Cost ss, ...}) =>
-           ( emit (int2str ruleno)
+           ( emit (Int.toString ruleno)
            ; emit " => (case map cost children of "
            ; emitlist (emit, index ([], labellist pattern))
            ; emit " => ("
@@ -61,7 +56,7 @@ struct
            ; emit ") | _ => raise InternalError \"S4\")\n  | "
            )
           | (Rule {ruleno, cost = NoCost, ...}) =>
-           (emit (int2str ruleno); emit " => DC\n  | ")) rules
+           (emit (Int.toString ruleno); emit " => DC\n  | ")) rules
     ; emit "_ => raise InternalError \"S4.3.\"\nend\n\n"
     )
 
@@ -69,12 +64,12 @@ struct
         let
           val suffix =
             if member (h, passed) orelse member (h, t) then
-              (int2str (count (h, passed) + 1))
+              (Int.toString (count (h, passed) + 1))
             else
               ""
         in
           ( "X_" ^ h ^ " " ^ h ^ suffix
-          , "execute (nth(children," ^ (int2str (length passed)) ^ "))"
+          , "execute (nth(children," ^ (Int.toString (length passed)) ^ "))"
           ) :: (tokens (h :: passed, t))
         end
     | tokens _ = []
@@ -85,13 +80,13 @@ struct
         let
           val suffix =
             if member (h, passed) orelse member (h, t) then
-              (int2str (count (h, passed) + 1))
+              (Int.toString (count (h, passed) + 1))
             else
               ""
         in
           ( "DO" ^ h ^ suffix
-          , (*	 "let val C = nth(children,"^(int2str (length passed))^")in fn () => let val X_"^h^" V = execute C in V end end" *)
-            "let val C = nth(children," ^ (int2str (length passed))
+          , (*	 "let val C = nth(children,"^(Int.toString (length passed))^")in fn () => let val X_"^h^" V = execute C in V end end" *)
+            "let val C = nth(children," ^ Int.toString (length passed)
             ^ ")in fn () => case execute C of X_" ^ h
             ^ " V => V | _ => raise InternalError \"S4.3\" end"
           ) :: (DOtokens (h :: passed, t))
@@ -131,7 +126,7 @@ struct
            let
              val labels = labellist pattern
            in
-             emit (int2str ruleno);
+             emit (Int.toString ruleno);
              emit " => ";
              (case ruletype of
                 Ordinary => emit ("X_" ^ l)
@@ -168,7 +163,7 @@ struct
         \ case r of\n"
     ; app
         (fn (Rule {ruleno, ruletype = Rewrite, ...}) =>
-           (emit (int2str ruleno); emit " => true |")
+           (emit (Int.toString ruleno); emit " => true |")
           | _ => ()) rules
     ; emit "_ => false\n"
     )
@@ -181,9 +176,9 @@ struct
   fun emitsymbols (emit, symbols) =
     let
       val maxarity =
-        accum
-          (fn (Node (_, a), max) => if a > max then a else max | (_, a) => a)
-          symbols 0
+        List.foldl
+          (fn (Node (_, a), max) => if a > max then a else max | (_, a) => a) 0
+          symbols
     in
       emit "ARC of int";
       map (fn s => emit (" | " ^ (symbol2str s))) symbols;
@@ -202,19 +197,19 @@ struct
         ; let
             val n =
               ( emit
-                  ("(" ^ (int2str ruleno) ^ "," ^ (int2str (leafs pattern))
-                   ^ ")")
-              ; accum
+                  ("(" ^ (Int.toString ruleno) ^ ","
+                   ^ (Int.toString (leafs pattern)) ^ ")")
+              ; List.foldl
                   (fn (Rule {ruleno, pattern, ...}, m) =>
                      ( emit
-                         (",\n(" ^ (int2str ruleno) ^ ","
-                          ^ (int2str (leafs pattern)) ^ ")")
+                         (",\n(" ^ (Int.toString ruleno) ^ ","
+                          ^ (Int.toString (leafs pattern)) ^ ")")
                      ; if ruleno > m then ruleno else m
-                     )) rules ruleno
+                     )) ruleno rules
               )
           in
             emit "]\nval matchtable = let val a = Array.array(";
-            emit (int2str (n + 1));
+            emit (Int.toString (n + 1));
             emit
               ",0) in ((app (fn(r,m)=>Array.update (a,r,m)) matchcounts); a) end\n\n\
               \fun matches r = Array.sub(matchtable, r)\n\n"
@@ -232,15 +227,15 @@ struct
         | member (a, h :: t) =
             a = h orelse member (a, t)
       val initials =
-        accum (fn ((_, _, i), a) => if member (i, a) then a else i :: a)
-          unitrules nil
+        List.foldl (fn ((_, _, i), a) => if member (i, a) then a else i :: a)
+          nil unitrules
       fun build_unittree (nt, visited) =
-        accum
+        List.foldl
           (fn ((r, n, p), ac) =>
              if p = nt andalso not (member (n, visited)) then
                Chain (r, n, build_unittree (n, n :: visited)) :: ac
              else
-               ac) unitrules nil
+               ac) nil unitrules
     in
       map (fn i => (i, build_unittree (i, [i]))) initials
     end
@@ -251,7 +246,7 @@ struct
         (emitmatchtree (emit, h); emit ","; emitmatchtreelist (emit, t))
   and emitmatchtree (emit, Chain (i, j, ml)) =
     ( emit "Chain ("
-    ; emit (int2str i)
+    ; emit (Int.toString i)
     ; emit ","
     ; emit (symbol2str j)
     ; emit ",["
