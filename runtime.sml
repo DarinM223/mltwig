@@ -156,15 +156,18 @@ struct
   val rec
     insert: symbol * skeletal * (symbol * skeletal) list
             -> (symbol * skeletal) list =
-    fn (i: symbol, s: skeletal, nil) => [(i, s)]
-     | (i: symbol, s: skeletal, (head as (i', s')) :: rest) =>
-      if i = i' then
-        if cost_less (cost s, cost s') then (i, s) :: rest else head :: rest
+    fn (symbol, skeletal, nil) => [(symbol, skeletal)]
+     | (symbol, skeletal, (head as (head_symbol, head_skeletal)) :: rest) =>
+      if symbol = head_symbol then
+        if cost_less (cost skeletal, cost head_skeletal) then
+          (symbol, skeletal) :: rest
+        else
+          head :: rest
       else
-        head :: (insert (i, s, rest))
+        head :: insert (symbol, skeletal, rest)
 
-  fun build_skeleton (ar as (r: rule, t: tree, cs: skeletal list)) : skeletal =
-    Skeleton (r, execute_cost ar, t, rev cs)
+  fun build_skeleton (ar as (rule, tree, children: skeletal list)) : skeletal =
+    Skeleton (rule, execute_cost ar, tree, rev children)
 
   (* get_closure takes four arguments. The first is a unit rule tree.
   The second is the sub-skeleton in the unit rule match. The third
@@ -235,16 +238,16 @@ struct
               , get_closure ((unitmatches o node_value) node, [], node, [])
               )
             end
-        | ls =>
+        | subtrees =>
             let
               val state' = go (state, node_value node)
               val (table, _) =
                 List.foldl
-                  (fn (l: tree, (t: skeletal table, i: int)) =>
+                  (fn (subtree, (t: skeletal table, i: int)) =>
                      let
                        val state'' = go (state', childsymbol i)
                        val (t': skeletal table, ss: (symbol * skeletal) list) =
-                         skeletons_of (state'', l, t)
+                         skeletons_of (state'', subtree, t)
                      in
                        ( List.foldl
                            (fn ((r: symbol, s: skeletal), t'': skeletal table) =>
@@ -259,7 +262,7 @@ struct
                               end) t' ss
                        , i + 1
                        )
-                     end) (new_level table, 1) ls
+                     end) (new_level table, 1) subtrees
               val (toplevel, table') = get_level table
             in
               ( table'
@@ -274,29 +277,30 @@ struct
                             (n, leave_best_alone (node, sl))) toplevel)
                 in
                   List.foldl
-                    (fn ((n, s), al) =>
-                       get_closure (unitmatches n, [s], node, al)) unclosurized
-                    unclosurized
+                    (fn ((symbol, skel), al) =>
+                       get_closure (unitmatches symbol, [skel], node, al))
+                    unclosurized unclosurized
                 end
               )
             end
     in
       case s of
         [] => (t, [])
-      | [(_, S as Skeleton (r, _, _, _))] =>
+      | [(_, skel as Skeleton (r, _, _, _))] =>
           if rewriterule r then
-            skeletons_of (state, (getreplacement o execute) S, table)
+            skeletons_of (state, getreplacement (execute skel), table)
           else
             (t, s)
-      | (_, sk) :: rest =>
+      | (_, skel0) :: rest =>
           let
             val best as Skeleton (r, _, _, _) =
               List.foldl
-                (fn ((_, s), bs) =>
-                   if cost_less (cost s, cost bs) then s else bs) sk rest
+                (fn ((_, skel), min) =>
+                   if cost_less (cost skel, cost min) then skel else min) skel0
+                rest
           in
             if rewriterule r then
-              skeletons_of (state, (getreplacement o execute) best, table)
+              skeletons_of (state, getreplacement (execute best), table)
             else
               (t, s)
           end
@@ -307,10 +311,10 @@ struct
       val (_, closure) = skeletons_of (initialstate, t, empty_table ())
       val skeletal =
         case closure of
-          (_, s) :: t =>
+          (_, skel0) :: t =>
             List.foldl
-              (fn ((n, s), bs) => if cost_less (cost s, cost bs) then s else bs)
-              s t
+              (fn ((_, skel), min) =>
+                 if cost_less (cost skel, cost min) then skel else min) skel0 t
         | nil => raise NoCover
     in
       execute skeletal
