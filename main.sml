@@ -267,13 +267,16 @@ struct
     ; emit "_ => [])\n\n"
     )
 
-  fun partition' (nil, u, n) = (u, n)
-    | partition' (Rule {ruleno, replacement, pattern = Leaf s, ...} :: t, u, n) =
-        partition' (t, (ruleno, replacement, s) :: u, n)
-    | partition' (r :: t, u, n) =
-        partition' (t, u, r :: n)
-
-  fun partition l = partition' (l, nil, nil)
+  fun partition l =
+    let
+      fun go (nil, u, n) = (u, n)
+        | go (Rule {ruleno, replacement, pattern = Leaf s, ...} :: t, u, n) =
+            go (t, (ruleno, replacement, s) :: u, n)
+        | go (r :: t, u, n) =
+            go (t, u, r :: n)
+    in
+      go (l, nil, nil)
+    end
 
   (* Main *)
 

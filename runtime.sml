@@ -190,8 +190,8 @@ struct
                end
                handle MatchAbort => ac') ac ct
 
-  val rec someone: tree * skeletal * skeletal match list -> skeletal list =
-    fn (tree, still_best, nil) => [still_best]
+  val rec someone: tree * skeletal * skeletal match list -> skeletal =
+    fn (tree, still_best, nil) => still_best
      | (tree, still_best, {rule, num_matches, children_skeletons} :: rest) =>
       if matches rule = num_matches then
         let
@@ -208,18 +208,19 @@ struct
       else
         someone (tree, still_best, rest)
 
-  val rec still_no_one: tree * skeletal match list -> skeletal list =
-    fn (tree, nil) => nil
+  val rec still_no_one: tree * skeletal match list -> skeletal option =
+    fn (tree, nil) => NONE
      | (tree, {rule, num_matches, children_skeletons} :: rest) =>
       if matches rule = num_matches then
-        someone (tree, build_skeleton (rule, tree, children_skeletons), rest)
+        SOME (someone
+          (tree, build_skeleton (rule, tree, children_skeletons), rest))
         handle MatchAbort => still_no_one (tree, rest)
       else
         still_no_one (tree, rest)
 
-  val leave_best_alone: tree * skeletal match list -> skeletal list =
+  val leave_best_alone: tree * skeletal match list -> skeletal option =
     fn (tree, nil) => internal "matcher state inconsistent. lba."
-     | (tree, l) => still_no_one (tree, l)
+     | (tree, matches) => still_no_one (tree, matches)
 
   fun skeletons_of (state: state, node: tree, table: skeletal table) :
     skeletal table * (symbol * skeletal) list =
@@ -269,12 +270,11 @@ struct
               , let
                   val unclosurized =
                     List.foldl
-                      (fn ((_, nil), l) => l
-                        | ((n, [e]), l) => (n, e) :: l
-                        | _ => internal "inconsistency. 01l") nil
+                      (fn ((_, NONE), acc) => acc
+                        | ((sym, SOME skel), acc) => (sym, skel) :: acc) nil
                       (List.map
-                         (fn (n: symbol, sl: skeletal match list) =>
-                            (n, leave_best_alone (node, sl))) toplevel)
+                         (fn (sym, matches) =>
+                            (sym, leave_best_alone (node, matches))) toplevel)
                 in
                   List.foldl
                     (fn ((symbol, skel), al) =>
